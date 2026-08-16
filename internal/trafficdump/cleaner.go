@@ -91,98 +91,123 @@ func EnforceTrafficLimits(baseDir string, maxRetentionDays int, maxTotalSizeMB i
 		return 0, err
 	}
 
-	now := time.Now()
 	cutoffTime := time.Time{}
 	if maxRetentionDays > 0 {
-		cutoffTime = now.AddDate(0, 0, -maxRetentionDays)
+		cutoffTime = time.Now().AddDate(0, 0, -maxRetentionDays)
 	}
 
+	sessions, expiredCount := collectAndPruneExpiredSessions(baseDir, dateEntries, cutoffTime, maxRetentionDays)
+	oversizedCount := purgeOversizedSessions(sessions, maxTotalSizeMB)
+
+	cleanEmptyDateDirs(baseDir)
+
+	totalDeleted := expiredCount + oversizedCount
+	return totalDeleted, nil
+}
+
+func collectAndPruneExpiredSessions(baseDir string, dateEntries []os.DirEntry, cutoffTime time.Time, maxRetentionDays int) ([]sessionDirInfo, int) {
 	var sessions []sessionDirInfo
 	var deletedCount int
 
-	// 1. Scan all date folders (yyyy-MM-dd)
 	for _, dateEntry := range dateEntries {
 		if !dateEntry.IsDir() {
 			continue
 		}
 		dateDirPath := filepath.Join(baseDir, dateEntry.Name())
-		sessionEntries, errReadDate := os.ReadDir(dateDirPath)
-		if errReadDate != nil {
+		surviving, deleted := processDateDirectory(dateDirPath, cutoffTime, maxRetentionDays)
+		sessions = append(sessions, surviving...)
+		deletedCount += deleted
+	}
+
+	return sessions, deletedCount
+}
+
+func processDateDirectory(dateDirPath string, cutoffTime time.Time, maxRetentionDays int) ([]sessionDirInfo, int) {
+	sessionEntries, err := os.ReadDir(dateDirPath)
+	if err != nil {
+		return nil, 0
+	}
+
+	var surviving []sessionDirInfo
+	var deletedCount int
+
+	for _, sEntry := range sessionEntries {
+		if !sEntry.IsDir() {
 			continue
 		}
 
-		for _, sEntry := range sessionEntries {
-			if !sEntry.IsDir() {
-				continue
-			}
-			sDirPath := filepath.Join(dateDirPath, sEntry.Name())
-			info, errStat := sEntry.Info()
-			if errStat != nil {
-				continue
-			}
-
-			modTime := info.ModTime()
-
-			// Condition 1: Check retention days
-			if maxRetentionDays > 0 && modTime.Before(cutoffTime) {
-				if errRemove := os.RemoveAll(sDirPath); errRemove == nil {
-					deletedCount++
-					continue
-				}
-			}
-
-			// Calculate session directory size
-			size, newestFileTime := getDirectorySizeAndModTime(sDirPath, modTime)
-			if newestFileTime.After(modTime) {
-				modTime = newestFileTime
-			}
-
-			// Double check retention with actual file timestamp if newer
-			if maxRetentionDays > 0 && modTime.Before(cutoffTime) {
-				if errRemove := os.RemoveAll(sDirPath); errRemove == nil {
-					deletedCount++
-					continue
-				}
-			}
-
-			sessions = append(sessions, sessionDirInfo{
-				path:    sDirPath,
-				modTime: modTime,
-				size:    size,
-			})
+		session, isExpired := inspectSessionDir(dateDirPath, sEntry, cutoffTime, maxRetentionDays)
+		if isExpired {
+			deletedCount++
+			continue
+		}
+		if session != nil {
+			surviving = append(surviving, *session)
 		}
 	}
 
-	// 2. Condition 2: Check total size limit
-	if maxTotalSizeMB > 0 {
-		maxBytes := int64(maxTotalSizeMB) * 1024 * 1024
-		var totalBytes int64
-		for _, s := range sessions {
-			totalBytes += s.size
-		}
+	return surviving, deletedCount
+}
 
-		if totalBytes > maxBytes {
-			// Sort oldest first
-			sort.Slice(sessions, func(i, j int) bool {
-				return sessions[i].modTime.Before(sessions[j].modTime)
-			})
+func inspectSessionDir(dateDirPath string, sEntry os.DirEntry, cutoffTime time.Time, maxRetentionDays int) (*sessionDirInfo, bool) {
+	sDirPath := filepath.Join(dateDirPath, sEntry.Name())
+	info, errStat := sEntry.Info()
+	if errStat != nil {
+		return nil, false
+	}
 
-			for _, s := range sessions {
-				if totalBytes <= maxBytes {
-					break
-				}
-				if errRemove := os.RemoveAll(s.path); errRemove == nil {
-					deletedCount++
-					totalBytes -= s.size
-				}
-			}
+	modTime := info.ModTime()
+	size, newestFileTime := getDirectorySizeAndModTime(sDirPath, modTime)
+	if newestFileTime.After(modTime) {
+		modTime = newestFileTime
+	}
+
+	isExpired := maxRetentionDays > 0 && modTime.Before(cutoffTime)
+	if isExpired {
+		if errRemove := os.RemoveAll(sDirPath); errRemove == nil {
+			return nil, true
 		}
 	}
 
-	// 3. Remove empty date directories
-	cleanEmptyDateDirs(baseDir)
+	return &sessionDirInfo{
+		path:    sDirPath,
+		modTime: modTime,
+		size:    size,
+	}, false
+}
 
-	return deletedCount, nil
+func purgeOversizedSessions(sessions []sessionDirInfo, maxTotalSizeMB int) int {
+	if maxTotalSizeMB <= 0 || len(sessions) == 0 {
+		return 0
+	}
+
+	maxBytes := int64(maxTotalSizeMB) * 1024 * 1024
+	var totalBytes int64
+	for _, s := range sessions {
+		totalBytes += s.size
+	}
+
+	if totalBytes <= maxBytes {
+		return 0
+	}
+
+	// Sort oldest first
+	sort.Slice(sessions, func(i, j int) bool {
+		return sessions[i].modTime.Before(sessions[j].modTime)
+	})
+
+	var deletedCount int
+	for _, s := range sessions {
+		if totalBytes <= maxBytes {
+			break
+		}
+		if errRemove := os.RemoveAll(s.path); errRemove == nil {
+			deletedCount++
+			totalBytes -= s.size
+		}
+	}
+
+	return deletedCount
 }
 
 func getDirectorySizeAndModTime(dirPath string, defaultModTime time.Time) (int64, time.Time) {

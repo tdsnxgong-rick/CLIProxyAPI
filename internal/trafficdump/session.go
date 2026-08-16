@@ -136,20 +136,8 @@ func (s *Session) WriteClientResponseHeaders(statusCode int, proto string, heade
 		return err
 	}
 
-	statusText := http.StatusText(statusCode)
-	if statusText == "" {
-		statusText = "Unknown"
-	}
-	if proto == "" {
-		proto = "HTTP/1.1"
-	}
-
-	var sb strings.Builder
-	sb.WriteString(fmt.Sprintf("%s %d %s\n", proto, statusCode, statusText))
-	s.writeHeaderLines(&sb, headers)
-	sb.WriteString("\n")
-
-	_, errWrite := f.WriteString(sb.String())
+	head := s.formatResponseHead(proto, statusCode, headers)
+	_, errWrite := f.WriteString(head)
 	return errWrite
 }
 
@@ -212,33 +200,17 @@ func (s *Session) WriteUpstreamResponseHeaders(attempt int, statusCode int, prot
 		return nil
 	}
 
-	if attempt <= 0 {
-		attempt = s.upstreamAttempts
-		if attempt <= 0 {
-			attempt = 1
-		}
-	}
+	attempt = s.resolveAttempt(attempt)
 
 	f, err := s.ensureUpstreamResponseFile(attempt)
 	if err != nil {
 		return err
 	}
 
-	statusText := http.StatusText(statusCode)
-	if statusText == "" {
-		statusText = "Unknown"
-	}
-	if proto == "" {
-		proto = "HTTP/1.1"
-	}
-
-	var sb strings.Builder
-	sb.WriteString(fmt.Sprintf("%s %d %s\n", proto, statusCode, statusText))
-	s.writeHeaderLines(&sb, headers)
-	sb.WriteString("\n")
+	head := s.formatResponseHead(proto, statusCode, headers)
 
 	s.upHeadersOut[attempt] = true
-	_, errWrite := f.WriteString(sb.String())
+	_, errWrite := f.WriteString(head)
 	return errWrite
 }
 
@@ -253,12 +225,7 @@ func (s *Session) WriteUpstreamResponseBodyChunk(attempt int, chunk []byte) erro
 		return nil
 	}
 
-	if attempt <= 0 {
-		attempt = s.upstreamAttempts
-		if attempt <= 0 {
-			attempt = 1
-		}
-	}
+	attempt = s.resolveAttempt(attempt)
 
 	f, err := s.ensureUpstreamResponseFile(attempt)
 	if err != nil {
@@ -280,12 +247,7 @@ func (s *Session) WriteUpstreamError(attempt int, err error) error {
 		return nil
 	}
 
-	if attempt <= 0 {
-		attempt = s.upstreamAttempts
-		if attempt <= 0 {
-			attempt = 1
-		}
-	}
+	attempt = s.resolveAttempt(attempt)
 
 	f, errFile := s.ensureUpstreamResponseFile(attempt)
 	if errFile != nil {
@@ -395,6 +357,32 @@ func (s *Session) formatHTTPRequest(method, uri, proto string, headers http.Head
 	copy(res, headerBytes)
 	copy(res[len(headerBytes):], body)
 	return res
+}
+
+func (s *Session) resolveAttempt(attempt int) int {
+	if attempt <= 0 {
+		attempt = s.upstreamAttempts
+		if attempt <= 0 {
+			attempt = 1
+		}
+	}
+	return attempt
+}
+
+func (s *Session) formatResponseHead(proto string, statusCode int, headers http.Header) string {
+	statusText := http.StatusText(statusCode)
+	if statusText == "" {
+		statusText = "Unknown"
+	}
+	if proto == "" {
+		proto = "HTTP/1.1"
+	}
+
+	var sb strings.Builder
+	sb.WriteString(fmt.Sprintf("%s %d %s\n", proto, statusCode, statusText))
+	s.writeHeaderLines(&sb, headers)
+	sb.WriteString("\n")
+	return sb.String()
 }
 
 func (s *Session) writeHeaderLines(sb *strings.Builder, headers http.Header) {

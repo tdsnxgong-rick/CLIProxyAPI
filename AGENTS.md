@@ -5,6 +5,11 @@ Go 1.26+ proxy server providing OpenAI/Gemini/Claude/Codex compatible APIs with 
 ## Repository
 - GitHub: https://github.com/router-for-me/CLIProxyAPI
 
+## Branching & Upstream Tracking (Core Mandate)
+- **The `main` branch must NEVER be modified:** Do not commit or push custom features directly to `main`.
+- `main` is strictly reserved for tracking and merging releases from the upstream open-source repository (`https://github.com/router-for-me/CLIProxyAPI`).
+- All custom features, local enhancements, and modifications must be developed and committed on dedicated branches (e.g., `rickg`).
+
 ## Commands
 ```bash
 gofmt -w . # Format (required after Go changes)

@@ -4,7 +4,10 @@ Set fso = CreateObject("Scripting.FileSystemObject")
 currentDir = fso.GetParentFolderName(WScript.ScriptFullName)
 ws.CurrentDirectory = currentDir
 
-configPath = "C:\tools\others\CLIProxyAPI\cpa-core\config.yaml"
+configPath = fso.BuildPath(currentDir, "..\..\config.yaml")
+If Not fso.FileExists(configPath) Then
+    configPath = fso.BuildPath(currentDir, "config.yaml")
+End If
 exePath = currentDir & "\cli-proxy-api.exe"
 
 If fso.FileExists(exePath) Then

@@ -9,12 +9,13 @@ The existing request logger records summarized or single-file diagnostic logs, b
 ## Solution
 
 Introduce a configurable **Traffic Dump** capability. When enabled in the configuration file:
-- Every client interaction creates an isolated directory named by timestamp and **Request ID** (`logs/traffic/<timestamp>-<request-id>/`).
+- Every client interaction creates an isolated directory partitioned by date and millisecond timestamp with **Request ID** (`logs/traffic/<YYYY-MM-DD>/<HH-mm-ss-SSS>-<request-id>/`).
 - Four distinct raw HTTP wire-format files are produced per request cycle: `client-request.txt`, `client-response.txt`, `upstream-request.txt`, and `upstream-response.txt`.
 - Streaming responses (SSE) are streamed to disk in real-time to guarantee that aborted connections and early errors are faithfully captured.
 - Upstream retries or multi-attempt failovers are recorded with sequence indicators (e.g. `upstream-request-2.txt`).
 - The **Request ID** is extracted from the client's `X-Request-ID` header if provided, or generated as an 8-character hex string.
 - An optional raw token mode allows capturing genuine authorization headers without masking for local diagnostics.
+- An integrated background retention cleaner automatically enforces age and disk size limits to prevent log directory growth.
 
 ## User Stories
 
@@ -36,13 +37,16 @@ Introduce a configurable **Traffic Dump** capability. When enabled in the config
      - `enabled` (boolean): Global toggle for traffic dumping.
      - `dir` (string): Target root directory for dumped traffic sessions (defaults to `logs/traffic`).
      - `raw-token` (boolean): When true, logs credentials verbatim without masking.
+     - `max-retention-days` (int): Number of days to retain traffic logs before automatic removal (0 to disable).
+     - `max-total-size-mb` (int): Maximum total storage space in MB allocated for all traffic dumps (0 to disable).
+     - `clean-interval-hours` (int): Interval in hours between background retention sweeps (defaults to 1).
 
 2. **Request ID Sourcing**:
    - Check incoming client headers for `X-Request-ID`. If non-empty, sanitize and use it as the session Request ID.
    - If `X-Request-ID` is missing, generate an 8-character hexadecimal identifier.
 
 3. **Storage & Directory Structure**:
-   - For every client request handled when the feature is enabled, create an isolated directory: `<dump-dir>/<YYYY-MM-DDTHHmmss>-<request-id>/`.
+   - For every client request handled when the feature is enabled, create an isolated directory: `<dump-dir>/<YYYY-MM-DD>/<HH-mm-ss-SSS>-<request-id>/`.
    - File outputs within this directory:
      - `client-request.txt`: Captured immediately upon receiving the client request.
      - `client-response.txt`: Appended and finalized as client response headers and chunks are transmitted.
@@ -81,7 +85,7 @@ Introduce a configurable **Traffic Dump** capability. When enabled in the config
 ## Out of Scope
 
 - Real-time Web UI / Dashboard for viewing traffic dumps.
-- Automatic compression (gzip/zstd) or rotation/pruning of dumped traffic folders (handled by external scripts or standard retention tools).
+- Automatic compression (gzip/zstd) of individual dumped traffic files.
 - Binary payload packet capture (PCAP) decoding.
 
 ## Further Notes
