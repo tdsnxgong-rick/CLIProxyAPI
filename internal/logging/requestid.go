@@ -4,6 +4,8 @@ import (
 	"context"
 	"crypto/rand"
 	"encoding/hex"
+	"net/http"
+	"strings"
 
 	"github.com/gin-gonic/gin"
 )
@@ -21,6 +23,17 @@ func GenerateRequestID() string {
 		return "00000000"
 	}
 	return hex.EncodeToString(b)
+}
+
+// ExtractOrGenerateRequestID extracts X-Request-ID from request headers if present,
+// otherwise generates a new 8-character hex request ID.
+func ExtractOrGenerateRequestID(req *http.Request) string {
+	if req != nil {
+		if id := strings.TrimSpace(req.Header.Get("X-Request-ID")); id != "" {
+			return id
+		}
+	}
+	return GenerateRequestID()
 }
 
 // WithRequestID returns a new context with the request ID attached.

@@ -84,6 +84,8 @@ func main() {
 	var vertexImport string
 	var vertexImportPrefix string
 	var configPath string
+	var portOverride int
+	var hostOverride string
 	var password string
 	var homeJWT string
 	var homeDisableClusterDiscovery bool
@@ -101,6 +103,8 @@ func main() {
 	flag.BoolVar(&kimiLogin, "kimi-login", false, "Login to Kimi using OAuth")
 	flag.BoolVar(&xaiLogin, "xai-login", false, "Login to xAI using OAuth")
 	flag.StringVar(&configPath, "config", DefaultConfigPath, "Configure File Path")
+	flag.IntVar(&portOverride, "port", 0, "Override server port from config file")
+	flag.StringVar(&hostOverride, "host", "", "Override server bind host from config file")
 	flag.StringVar(&vertexImport, "vertex-import", "", "Import Vertex service account key JSON file")
 	flag.StringVar(&vertexImportPrefix, "vertex-import-prefix", "", "Prefix for Vertex model namespacing (use with -vertex-import)")
 	flag.StringVar(&password, "password", "", "")
@@ -533,6 +537,12 @@ func main() {
 	}
 	if cfg == nil {
 		cfg = &config.Config{}
+	}
+	if portOverride > 0 {
+		cfg.Port = portOverride
+	}
+	if hostOverride != "" {
+		cfg.Host = hostOverride
 	}
 
 	// In cloud deploy mode, check if we have a valid configuration

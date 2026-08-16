@@ -14,6 +14,7 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/router-for-me/CLIProxyAPI/v7/internal/config"
 	"github.com/router-for-me/CLIProxyAPI/v7/internal/logging"
+	"github.com/router-for-me/CLIProxyAPI/v7/internal/trafficdump"
 	"github.com/router-for-me/CLIProxyAPI/v7/internal/util"
 	log "github.com/sirupsen/logrus"
 	"github.com/tidwall/gjson"
@@ -62,6 +63,10 @@ func requestLogCaptureEnabled(cfg *config.Config) bool {
 
 // RecordAPIRequest stores the upstream request metadata in Gin context for request logging.
 func RecordAPIRequest(ctx context.Context, cfg *config.Config, info UpstreamRequestLog) {
+	if session := trafficdump.FromContext(ctx); session != nil {
+		_ = session.WriteUpstreamRequest(0, info.Method, info.URL, "HTTP/1.1", info.Headers, info.Body)
+	}
+
 	if cfg == nil || cfg.CommercialMode {
 		return
 	}
@@ -189,6 +194,9 @@ func newAPIRequestLogBuilder(index int, info UpstreamRequestLog, timestamp time.
 // RecordAPIResponseMetadata captures upstream response status/header information for the latest attempt.
 func RecordAPIResponseMetadata(ctx context.Context, cfg *config.Config, status int, headers http.Header) {
 	logging.SetResponseHeaders(ctx, headers)
+	if session := trafficdump.FromContext(ctx); session != nil {
+		_ = session.WriteUpstreamResponseHeaders(0, status, "HTTP/1.1", headers)
+	}
 	if !requestLogCaptureEnabled(cfg) {
 		return
 	}
@@ -217,6 +225,9 @@ func RecordAPIResponseMetadata(ctx context.Context, cfg *config.Config, status i
 
 // RecordAPIResponseError adds an error entry for the latest attempt when no HTTP response is available.
 func RecordAPIResponseError(ctx context.Context, cfg *config.Config, err error) {
+	if session := trafficdump.FromContext(ctx); session != nil && err != nil {
+		_ = session.WriteUpstreamError(0, err)
+	}
 	if !requestLogCaptureEnabled(cfg) || err == nil {
 		return
 	}
@@ -242,6 +253,9 @@ func RecordAPIResponseError(ctx context.Context, cfg *config.Config, err error) 
 
 // AppendAPIResponseChunk appends an upstream response chunk to Gin context for request logging.
 func AppendAPIResponseChunk(ctx context.Context, cfg *config.Config, chunk []byte) {
+	if session := trafficdump.FromContext(ctx); session != nil && len(chunk) > 0 {
+		_ = session.WriteUpstreamResponseBodyChunk(0, chunk)
+	}
 	if !requestLogCaptureEnabled(cfg) {
 		return
 	}
@@ -286,6 +300,13 @@ func AppendAPIResponseChunk(ctx context.Context, cfg *config.Config, chunk []byt
 
 // RecordAPIWebsocketRequest stores an upstream websocket request event in Gin context.
 func RecordAPIWebsocketRequest(ctx context.Context, cfg *config.Config, info UpstreamRequestLog) {
+	if session := trafficdump.FromContext(ctx); session != nil {
+		attemptIdx := 1
+		if ginCtx := ginContextFrom(ctx); ginCtx != nil {
+			attemptIdx = len(getAttempts(ginCtx)) + 1
+		}
+		_ = session.WriteUpstreamRequest(attemptIdx, info.Method, info.URL, "HTTP/1.1", info.Headers, info.Body)
+	}
 	if !requestLogCaptureEnabled(cfg) {
 		return
 	}

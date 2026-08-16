@@ -32,6 +32,26 @@ func (cfg *Config) NormalizePluginsConfig() {
 	}
 }
 
+// NormalizeDumpTrafficConfig normalizes the traffic dump configuration.
+func (cfg *Config) NormalizeDumpTrafficConfig() {
+	if cfg == nil {
+		return
+	}
+	cfg.DumpTraffic.Dir = strings.TrimSpace(cfg.DumpTraffic.Dir)
+	if cfg.DumpTraffic.Dir == "" {
+		cfg.DumpTraffic.Dir = "logs/traffic"
+	}
+	if cfg.DumpTraffic.MaxRetentionDays < 0 {
+		cfg.DumpTraffic.MaxRetentionDays = 30
+	}
+	if cfg.DumpTraffic.MaxTotalSizeMB < 0 {
+		cfg.DumpTraffic.MaxTotalSizeMB = 1024
+	}
+	if cfg.DumpTraffic.CleanIntervalHours <= 0 {
+		cfg.DumpTraffic.CleanIntervalHours = 24
+	}
+}
+
 // SanitizeCodexHeaderDefaults trims surrounding whitespace from the
 // configured Codex header fallback values.
 func (cfg *Config) SanitizeCodexHeaderDefaults() {

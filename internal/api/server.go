@@ -12,6 +12,7 @@ import (
 	"net"
 	"net/http"
 	"os"
+	"path/filepath"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -26,6 +27,7 @@ import (
 	"github.com/router-for-me/CLIProxyAPI/v7/internal/managementasset"
 	"github.com/router-for-me/CLIProxyAPI/v7/internal/pluginhost"
 	"github.com/router-for-me/CLIProxyAPI/v7/internal/redisqueue"
+	"github.com/router-for-me/CLIProxyAPI/v7/internal/trafficdump"
 	sdkaccess "github.com/router-for-me/CLIProxyAPI/v7/sdk/access"
 	"github.com/router-for-me/CLIProxyAPI/v7/sdk/api/handlers"
 	"github.com/router-for-me/CLIProxyAPI/v7/sdk/cliproxy/auth"
@@ -137,6 +139,14 @@ func NewServer(cfg *config.Config, authManager *auth.Manager, accessManager *sdk
 	engine.Use(logging.GinLogrusLogger())
 	engine.Use(logging.GinLogrusRecovery())
 	engine.Use(logging.CPATraceIDMiddleware())
+	engine.Use(trafficdump.Middleware(cfg, filepath.Dir(configFilePath)))
+	if cfg.DumpTraffic.Enabled {
+		trafficDir := cfg.DumpTraffic.Dir
+		if !filepath.IsAbs(trafficDir) && configFilePath != "" {
+			trafficDir = filepath.Join(filepath.Dir(configFilePath), trafficDir)
+		}
+		trafficdump.StartCleaner(context.Background(), trafficDir, cfg.DumpTraffic.MaxRetentionDays, cfg.DumpTraffic.MaxTotalSizeMB, cfg.DumpTraffic.CleanIntervalHours)
+	}
 	for _, mw := range optionState.extraMiddleware {
 		engine.Use(mw)
 	}

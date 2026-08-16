@@ -42,6 +42,9 @@ type SDKConfig struct {
 	// RequestLog enables or disables detailed request logging functionality.
 	RequestLog bool `yaml:"request-log" json:"request-log"`
 
+	// DumpTraffic configures raw HTTP wire traffic dumping to disk.
+	DumpTraffic DumpTrafficConfig `yaml:"dump-traffic" json:"dump-traffic"`
+
 	// CodexOptimizeMultiAgentV2 mirrors the provider-wide runtime setting for API handlers.
 	CodexOptimizeMultiAgentV2 bool `yaml:"-" json:"-"`
 
