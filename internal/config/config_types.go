@@ -8,20 +8,16 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
-// DumpTrafficConfig configures raw HTTP wire traffic dumping to disk.
-type DumpTrafficConfig struct {
-	// Enabled toggles raw traffic dumping per request.
-	Enabled bool `yaml:"enabled" json:"enabled"`
-	// Dir specifies the root directory for traffic dump sessions. Defaults to "logs/traffic".
-	Dir string `yaml:"dir,omitempty" json:"dir,omitempty"`
-	// RawToken preserves credentials verbatim in captured headers without masking when true.
-	RawToken bool `yaml:"raw-token,omitempty" json:"raw-token,omitempty"`
-	// MaxRetentionDays deletes traffic sessions older than the specified days. Defaults to 30. Set to 0 to disable.
-	MaxRetentionDays int `yaml:"max-retention-days,omitempty" json:"max-retention-days,omitempty"`
-	// MaxTotalSizeMB limits the total disk size (in MB) of traffic dump folders. When exceeded, the oldest sessions are removed. Defaults to 1024 (1GB). Set to 0 to disable.
-	MaxTotalSizeMB int `yaml:"max-total-size-mb,omitempty" json:"max-total-size-mb,omitempty"`
-	// CleanIntervalHours specifies the background cleanup interval in hours. Defaults to 24.
-	CleanIntervalHours int `yaml:"clean-interval-hours,omitempty" json:"clean-interval-hours,omitempty"`
+// RequestScopedErrorRule configures custom classification and handling for upstream errors.
+type RequestScopedErrorRule struct {
+	// Status matches the HTTP status code of the upstream response (e.g. 400).
+	Status int `yaml:"status,omitempty" json:"status,omitempty"`
+	// Match matches substrings in the upstream error body.
+	Match []string `yaml:"match,omitempty" json:"match,omitempty"`
+	// MatchRegexr matches regular expressions in the upstream error body.
+	MatchRegexr []string `yaml:"match-regexr,omitempty" json:"match-regexr,omitempty"`
+	// Action specifies the handling behavior: "stop", "stop-and-cooldown", "continue", "continue-and-cooldown".
+	Action string `yaml:"action,omitempty" json:"action,omitempty"`
 }
 
 // PluginsConfig holds dynamic plugin system settings.
@@ -368,12 +364,16 @@ type ClaudeKey struct {
 	// RebuildMidSystemMessage moves Claude messages with role "system" into the top-level system field.
 	RebuildMidSystemMessage bool `yaml:"rebuild-mid-system-message,omitempty" json:"rebuild-mid-system-message,omitempty"`
 
-	// DisableCooling disables auth/model cooldown scheduling for this credential when true.
-	DisableCooling bool `yaml:"disable-cooling,omitempty" json:"disable-cooling,omitempty"`
+	// DisableCooling overrides the global cooling policy for this credential when set.
+	// True disables auth/model cooldowns; false explicitly enables them.
+	DisableCooling *bool `yaml:"disable-cooling,omitempty" json:"disable-cooling,omitempty"`
 
 	// RequestRetry optionally overrides the global request-retry for this credential.
 	// Nil or a negative value means "use the global request-retry". 0 disables retries.
 	RequestRetry *int `yaml:"request-retry,omitempty" json:"request-retry,omitempty"`
+
+	// RequestScopedErrors configures custom classification rules for upstream errors.
+	RequestScopedErrors []RequestScopedErrorRule `yaml:"request-scoped-errors,omitempty" json:"request-scoped-errors,omitempty"`
 
 	// Cloak configures request cloaking for non-Claude-Code clients.
 	Cloak *CloakConfig `yaml:"cloak,omitempty" json:"cloak,omitempty"`
@@ -467,12 +467,16 @@ type CodexKey struct {
 	// ExcludedModels lists model IDs that should be excluded for this provider.
 	ExcludedModels []string `yaml:"excluded-models,omitempty" json:"excluded-models,omitempty"`
 
-	// DisableCooling disables auth/model cooldown scheduling for this credential when true.
-	DisableCooling bool `yaml:"disable-cooling,omitempty" json:"disable-cooling,omitempty"`
+	// DisableCooling overrides the global cooling policy for this credential when set.
+	// True disables auth/model cooldowns; false explicitly enables them.
+	DisableCooling *bool `yaml:"disable-cooling,omitempty" json:"disable-cooling,omitempty"`
 
 	// RequestRetry optionally overrides the global request-retry for this credential.
 	// Nil or a negative value means "use the global request-retry". 0 disables retries.
 	RequestRetry *int `yaml:"request-retry,omitempty" json:"request-retry,omitempty"`
+
+	// RequestScopedErrors configures custom classification rules for upstream errors.
+	RequestScopedErrors []RequestScopedErrorRule `yaml:"request-scoped-errors,omitempty" json:"request-scoped-errors,omitempty"`
 }
 
 func (k CodexKey) GetAPIKey() string { return k.APIKey }
@@ -560,12 +564,16 @@ type GeminiKey struct {
 	// ExcludedModels lists model IDs that should be excluded for this provider.
 	ExcludedModels []string `yaml:"excluded-models,omitempty" json:"excluded-models,omitempty"`
 
-	// DisableCooling disables auth/model cooldown scheduling for this credential when true.
-	DisableCooling bool `yaml:"disable-cooling,omitempty" json:"disable-cooling,omitempty"`
+	// DisableCooling overrides the global cooling policy for this credential when set.
+	// True disables auth/model cooldowns; false explicitly enables them.
+	DisableCooling *bool `yaml:"disable-cooling,omitempty" json:"disable-cooling,omitempty"`
 
 	// RequestRetry optionally overrides the global request-retry for this credential.
 	// Nil or a negative value means "use the global request-retry". 0 disables retries.
 	RequestRetry *int `yaml:"request-retry,omitempty" json:"request-retry,omitempty"`
+
+	// RequestScopedErrors configures custom classification rules for upstream errors.
+	RequestScopedErrors []RequestScopedErrorRule `yaml:"request-scoped-errors,omitempty" json:"request-scoped-errors,omitempty"`
 }
 
 func (k GeminiKey) GetAPIKey() string { return k.APIKey }
@@ -643,12 +651,16 @@ type OpenAICompatibility struct {
 	// SupportPromptCacheKey enables derived prompt_cache_key injection for supported requests.
 	SupportPromptCacheKey bool `yaml:"support-prompt-cache-key,omitempty" json:"support-prompt-cache-key,omitempty"`
 
-	// DisableCooling disables auth/model cooldown scheduling for this provider when true.
-	DisableCooling bool `yaml:"disable-cooling,omitempty" json:"disable-cooling,omitempty"`
+	// DisableCooling overrides the global cooling policy for this provider when set.
+	// True disables auth/model cooldowns; false explicitly enables them.
+	DisableCooling *bool `yaml:"disable-cooling,omitempty" json:"disable-cooling,omitempty"`
 
 	// RequestRetry optionally overrides the global request-retry for this provider.
 	// Nil or a negative value means "use the global request-retry". 0 disables retries.
 	RequestRetry *int `yaml:"request-retry,omitempty" json:"request-retry,omitempty"`
+
+	// RequestScopedErrors configures custom classification rules for upstream errors.
+	RequestScopedErrors []RequestScopedErrorRule `yaml:"request-scoped-errors,omitempty" json:"request-scoped-errors,omitempty"`
 }
 
 // OpenAICompatibilityAPIKey represents an API key configuration with optional proxy setting.
