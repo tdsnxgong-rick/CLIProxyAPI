@@ -8,6 +8,22 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
+// DumpTrafficConfig configures raw HTTP wire traffic dumping to disk.
+type DumpTrafficConfig struct {
+	// Enabled toggles raw traffic dumping per request.
+	Enabled bool `yaml:"enabled" json:"enabled"`
+	// Dir specifies the root directory for traffic dump sessions. Defaults to "logs/traffic".
+	Dir string `yaml:"dir,omitempty" json:"dir,omitempty"`
+	// RawToken preserves credentials verbatim in captured headers without masking when true.
+	RawToken bool `yaml:"raw-token,omitempty" json:"raw-token,omitempty"`
+	// MaxRetentionDays deletes traffic sessions older than the specified days. Defaults to 30. Set to 0 to disable.
+	MaxRetentionDays int `yaml:"max-retention-days,omitempty" json:"max-retention-days,omitempty"`
+	// MaxTotalSizeMB limits the total disk size (in MB) of traffic dump folders. When exceeded, the oldest sessions are removed. Defaults to 1024 (1GB). Set to 0 to disable.
+	MaxTotalSizeMB int `yaml:"max-total-size-mb,omitempty" json:"max-total-size-mb,omitempty"`
+	// CleanIntervalHours specifies the background cleanup interval in hours. Defaults to 24.
+	CleanIntervalHours int `yaml:"clean-interval-hours,omitempty" json:"clean-interval-hours,omitempty"`
+}
+
 // RequestScopedErrorRule configures custom classification and handling for upstream errors.
 type RequestScopedErrorRule struct {
 	// Status matches the HTTP status code of the upstream response (e.g. 400).
